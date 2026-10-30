@@ -1,0 +1,23 @@
+{
+  "name": "folio-file-viewer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/build.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.6",
+    "highlight.js": "^11.11.1",
+    "marked": "^15.0.12",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "smol-toml": "^1.4.2",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
+  }
+}
