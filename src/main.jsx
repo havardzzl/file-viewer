@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -113,6 +113,8 @@ function Icon({ name, size = 18 }) {
     x: <><path d="m18 6-12 12M6 6l12 12"/></>,
     code: <><path d="m8 17-5-5 5-5M16 7l5 5-5 5M14 4l-4 16"/></>,
     down: <path d="m7 10 5 5 5-5"/>,
+    expand: <path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>,
+    shrink: <path d="M3 8h5V3M21 8h-5V3M16 21v-5h5M8 21v-5H3"/>,
   };
   return <svg {...common}>{shapes[name]}</svg>;
 }
@@ -143,9 +145,51 @@ function App() {
   const [tab, setTab] = useState('preview');
   const [copied, setCopied] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
   const inputRef = useRef(null);
+  const previewRef = useRef(null);
+  const fullscreenButtonRef = useRef(null);
   const format = useMemo(() => detectFormat(content, filename), [content, filename]);
   const lineCount = content ? content.split('\n').length : 0;
+
+  const exitPreviewFullscreen = useCallback(() => {
+    setPreviewFullscreen(false);
+    if (document.fullscreenElement === previewRef.current) {
+      document.exitFullscreen().catch(() => {});
+    }
+    fullscreenButtonRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const active = document.fullscreenElement === previewRef.current;
+      setPreviewFullscreen(active);
+      if (!active) fullscreenButtonRef.current?.focus({ preventScroll: true });
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (!previewFullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = event => {
+      if (event.key === 'Escape') exitPreviewFullscreen();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [previewFullscreen, exitPreviewFullscreen]);
+
+  const togglePreviewFullscreen = async () => {
+    if (previewFullscreen) { exitPreviewFullscreen(); return; }
+    setPreviewFullscreen(true);
+    // Keep the viewport-filling layout when native fullscreen is unavailable.
+    try { await previewRef.current?.requestFullscreen?.(); } catch { /* Use CSS fallback. */ }
+  };
 
   const loadFile = useCallback(file => {
     if (!file) return;
@@ -184,27 +228,27 @@ function App() {
   const useSample = key => { setContent(samples[key]); setFilename(''); setTab('preview'); };
 
   return <div className="app-shell">
-    <header className="topbar">
+    <header className="topbar" inert={previewFullscreen}>
       <a className="brand" href="#top" aria-label="Folio 首页"><span className="brand-mark"><Icon name="file" size={18}/></span><span className="brand-name">folio<span className="brand-dot">.</span></span></a>
       <div className="topbar-right"><span className="privacy-note"><span className="privacy-dot"/> 所有内容仅在本地处理</span><span className="topbar-divider"/><a className="topbar-link" href="https://vercel.com" target="_blank" rel="noreferrer">一个安静的文件空间</a></div>
     </header>
 
     <main id="top" className="main-content">
-      <section className="intro">
+      <section className="intro" inert={previewFullscreen}>
         <div className="eyebrow"><Icon name="sparkle" size={14}/> JUST THE WAY IT SHOULD BE</div>
         <h1>文件，恰好如此呈现<span>。</span></h1>
         <p>粘贴内容，或将文件放在这里。<br className="mobile-break"/>格式识别与优雅呈现，交给 Folio。</p>
       </section>
 
       <section className={`workspace ${dragging ? 'is-dragging' : ''}`} onDragEnter={e => { e.preventDefault(); setDragging(true); }} onDragOver={e => e.preventDefault()} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); }} onDrop={e => { e.preventDefault(); setDragging(false); loadFile(e.dataTransfer.files?.[0]); }}>
-        <section className="input-panel" aria-label="文件输入">
+        <section className="input-panel" aria-label="文件输入" inert={previewFullscreen}>
           <div className="panel-header"><div className="panel-heading"><span className="step-number">01</span><h2>添加内容</h2></div><button className="upload-button" onClick={() => inputRef.current?.click()}><Icon name="upload" size={16}/> 上传文件</button><input ref={inputRef} className="visually-hidden" type="file" onChange={e => loadFile(e.target.files?.[0])} accept=".json,.jsonc,.md,.markdown,.toml,.yaml,.yml,.txt,.log,.html,.htm,.xml,.js,.mjs,.cjs,.ts,.tsx,.jsx,.css,.scss,.sh,.bash,.sql,.csv,.env,.ini,.conf"/></div>
           <div className="editor-wrap"><div className="editor-gutter">{Array.from({ length: Math.max(lineCount, 1) }, (_, index) => <span key={index}>{index + 1}</span>)}</div><textarea value={content} onChange={e => { setContent(e.target.value); setFilename(''); }} onPaste={onPaste} spellCheck="false" aria-label="粘贴或输入文件内容" placeholder="在此粘贴内容…" /></div>
           <div className="input-footer"><span>直接粘贴或拖拽文件到此处</span><span className="format-examples">JSON · Markdown · TOML · YAML</span></div>
         </section>
 
-        <section className="preview-panel" aria-label="格式化预览">
-          <div className="panel-header preview-header"><div className="panel-heading"><span className="step-number">02</span><h2>预览</h2></div><div className="header-actions"><button className={`icon-button ${copied ? 'copied' : ''}`} onClick={copyContent} aria-label="复制原始内容" title="复制原始内容"><Icon name={copied ? 'check' : 'copy'} size={16}/></button><button className="icon-button" onClick={() => { setContent(''); setFilename(''); }} aria-label="清空内容" title="清空内容"><Icon name="x" size={17}/></button></div></div>
+        <section ref={previewRef} id="preview-panel" className={`preview-panel${previewFullscreen ? ' preview-fullscreen' : ''}`} aria-label="格式化预览">
+          <div className="panel-header preview-header"><div className="panel-heading"><span className="step-number">02</span><h2>预览</h2></div><div className="header-actions"><button ref={fullscreenButtonRef} className="icon-button" onClick={togglePreviewFullscreen} aria-label={previewFullscreen ? "退出全屏" : "全屏预览"} title={previewFullscreen ? "退出全屏（Esc）" : "全屏预览"} aria-pressed={previewFullscreen} aria-controls="preview-panel"><Icon name={previewFullscreen ? "shrink" : "expand"} size={16}/></button><button className={`icon-button ${copied ? 'copied' : ''}`} onClick={copyContent} aria-label="复制原始内容" title="复制原始内容"><Icon name={copied ? 'check' : 'copy'} size={16}/></button><button className="icon-button" onClick={() => { setContent(''); setFilename(''); }} aria-label="清空内容" title="清空内容"><Icon name="x" size={17}/></button></div></div>
           <div className="preview-toolbar"><div className="format-pill"><span className="format-indicator"/><span>{formatNames[format] || format.toUpperCase()}</span><span className="auto-label">自动识别</span></div><div className="view-switch" role="tablist" aria-label="预览方式"><button className={tab === 'preview' ? 'active' : ''} onClick={() => setTab('preview')} role="tab" aria-selected={tab === 'preview'}>渲染</button><button className={tab === 'source' ? 'active' : ''} onClick={() => setTab('source')} role="tab" aria-selected={tab === 'source'}>源码</button></div></div>
           <div className={`preview-canvas ${tab === 'source' ? 'source-canvas' : ''}`}>
             {tab === 'source' ? <pre className="source-view"><code>{content || '这里会显示文件内容…'}</code></pre> : rendered || <div className="empty-state"><span className="empty-icon"><Icon name="file" size={22}/></span><p>在左侧粘贴内容<br/>或上传一个文件开始</p></div>}
@@ -213,8 +257,8 @@ function App() {
         </section>
       </section>
 
-      <section className="samples-section"><div className="samples-label">或者，试试看</div><div className="sample-list"><button onClick={() => useSample('json')}><span className="sample-icon braces">{ }</span><span>JSON 示例</span><span className="sample-arrow">↗</span></button><button onClick={() => useSample('markdown')}><span className="sample-icon hash">#</span><span>Markdown 示例</span><span className="sample-arrow">↗</span></button><button onClick={() => useSample('toml')}><span className="sample-icon brackets">[ ]</span><span>TOML 示例</span><span className="sample-arrow">↗</span></button></div></section>
-      <footer className="page-footer"><span>为认真阅读而做。</span><span>一切内容，只在你的设备上。</span></footer>
+      <section className="samples-section" inert={previewFullscreen}><div className="samples-label">或者，试试看</div><div className="sample-list"><button onClick={() => useSample('json')}><span className="sample-icon braces">{ }</span><span>JSON 示例</span><span className="sample-arrow">↗</span></button><button onClick={() => useSample('markdown')}><span className="sample-icon hash">#</span><span>Markdown 示例</span><span className="sample-arrow">↗</span></button><button onClick={() => useSample('toml')}><span className="sample-icon brackets">[ ]</span><span>TOML 示例</span><span className="sample-arrow">↗</span></button></div></section>
+      <footer className="page-footer" inert={previewFullscreen}><span>为认真阅读而做。</span><span>一切内容，只在你的设备上。</span></footer>
     </main>
     {dragging && <div className="drop-overlay"><div className="drop-card"><Icon name="upload" size={27}/><strong>放下文件，即刻预览</strong><span>支持 JSON、Markdown、TOML 等多种格式</span></div></div>}
   </div>;
