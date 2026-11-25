@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#282c34" />
+    <script>
+      try {
+        var t = localStorage.getItem('folio-theme');
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.dataset.theme = t;
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', t === 'light' ? '#f6f7f9' : '#282c34');
+        }
+      } catch (e) {}
+    </script>
     <meta name="description" content="一个安静、优雅的文件预览空间。粘贴或上传内容，即刻获得合适的格式化展示。" />
     <title>Folio — 文件，恰好如此呈现。</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

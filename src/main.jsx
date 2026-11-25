@@ -15,7 +15,6 @@ import ini from 'highlight.js/lib/languages/ini';
 import sqlLang from 'highlight.js/lib/languages/sql';
 import { parse as parseToml } from 'smol-toml';
 import { parse as parseYaml } from 'yaml';
-import 'highlight.js/styles/github-dark.css';
 import './style.css';
 
 hljs.registerLanguage('json', json);
@@ -115,8 +114,21 @@ function Icon({ name, size = 18 }) {
     down: <path d="m7 10 5 5 5-5"/>,
     expand: <path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>,
     shrink: <path d="M3 8h5V3M21 8h-5V3M16 21v-5h5M8 21v-5H3"/>,
+    sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></>,
+    moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>,
   };
   return <svg {...common}>{shapes[name]}</svg>;
+}
+
+const THEME_STORAGE_KEY = 'folio-theme';
+const THEME_COLORS = { dark: '#282c34', light: '#f6f7f9' };
+
+function getInitialTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch { /* Ignore storage access errors. */ }
+  return 'dark';
 }
 
 const formatNames = { json: 'JSON', markdown: 'Markdown', toml: 'TOML', yaml: 'YAML', html: 'HTML', xml: 'XML', javascript: 'JavaScript', typescript: 'TypeScript', jsx: 'JSX', css: 'CSS', scss: 'SCSS', bash: 'Shell', sql: 'SQL', csv: 'CSV', text: '纯文本' };
@@ -146,11 +158,21 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  const [theme, setTheme] = useState(getInitialTheme);
   const inputRef = useRef(null);
   const previewRef = useRef(null);
   const fullscreenButtonRef = useRef(null);
   const format = useMemo(() => detectFormat(content, filename), [content, filename]);
   const lineCount = content ? content.split('\n').length : 0;
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) metaTheme.setAttribute('content', THEME_COLORS[theme]);
+    try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* Ignore storage access errors. */ }
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(current => (current === 'dark' ? 'light' : 'dark'));
 
   const exitPreviewFullscreen = useCallback(() => {
     setPreviewFullscreen(false);
@@ -230,7 +252,22 @@ function App() {
   return <div className="app-shell">
     <header className="topbar" inert={previewFullscreen}>
       <a className="brand" href="#top" aria-label="Folio 首页"><span className="brand-mark"><Icon name="file" size={18}/></span><span className="brand-name">folio<span className="brand-dot">.</span></span></a>
-      <div className="topbar-right"><span className="privacy-note"><span className="privacy-dot"/> 所有内容仅在本地处理</span><span className="topbar-divider"/><a className="topbar-link" href="https://vercel.com" target="_blank" rel="noreferrer">一个安静的文件空间</a></div>
+      <div className="topbar-right">
+        <span className="privacy-note"><span className="privacy-dot"/> 所有内容仅在本地处理</span>
+        <span className="topbar-divider"/>
+        <a className="topbar-link" href="https://vercel.com" target="_blank" rel="noreferrer">一个安静的文件空间</a>
+        <span className="topbar-divider"/>
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+          title={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+        >
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={14}/>
+          <span className="theme-toggle-label">{theme === 'dark' ? '浅色' : '深色'}</span>
+        </button>
+      </div>
     </header>
 
     <main id="top" className="main-content">
